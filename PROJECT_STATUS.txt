@@ -1,0 +1,19 @@
+Smart Tahrir Processor
+Prototype: 0.1
+Status: Initial JUCE VST3 build scaffold
+
+Implemented:
+- JUCE/CMake project
+- VST3 target
+- Transparent audio pass-through
+- Basic parameter state and editor attachments
+- Windows GitHub Actions workflow
+
+Not implemented:
+- Pitch tracking
+- Tahrir/vibrato classification
+- Tahrir enhancement
+- Automatic tahrir generation
+- Persian/Arabic/Turkish phrase engine
+
+Next milestone: Verify successful Windows x64 VST3 build and test host loading.
