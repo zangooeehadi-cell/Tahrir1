@@ -12,9 +12,12 @@ public:
 
 private:
     SmartTahrirProcessor& processor;
-    juce::Slider enhance, autoTahrir, hold, depth;
-    juce::Label title, status;
-    using Attachment = juce::AudioProcessorValueTreeState::SliderAttachment;
-    std::unique_ptr<Attachment> enhanceAttachment, autoAttachment, holdAttachment, depthAttachment;
+    juce::Slider enhance, autoTahrir, hold, depth, speed;
+    juce::ComboBox style;
+    juce::Label title, subtitle, status, enhanceLabel, autoLabel, holdLabel, depthLabel, speedLabel, styleLabel;
+    using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
+    using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+    std::unique_ptr<SliderAttachment> enhanceAttachment, autoAttachment, holdAttachment, depthAttachment, speedAttachment;
+    std::unique_ptr<ComboAttachment> styleAttachment;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SmartTahrirEditor)
 };

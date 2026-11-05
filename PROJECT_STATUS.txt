@@ -1,19 +1,23 @@
 Smart Tahrir Processor
-Prototype: 0.1
-Status: Initial JUCE VST3 build scaffold
+Version: 0.2 experimental DSP
 
 Implemented:
-- JUCE/CMake project
-- VST3 target
-- Transparent audio pass-through
-- Basic parameter state and editor attachments
-- Windows GitHub Actions workflow
+- JUCE VST3 project
+- Generated JuceHeader via juce_generate_juce_header
+- Stereo input/output
+- Modulated-delay pitch ornament engine
+- Sustained input-energy hold gate
+- Persian / Arabic / Turkish initial curve profiles
+- Enhance, Auto Tahrir, Hold, Depth, Speed, Style controls
+- Parameter state persistence
+- Reported fixed latency
+- Windows x64 GitHub Actions build and artifact upload
 
-Not implemented:
-- Pitch tracking
-- Tahrir/vibrato classification
-- Tahrir enhancement
-- Automatic tahrir generation
-- Persian/Arabic/Turkish phrase engine
+Not yet implemented:
+- Reliable monophonic F0 tracking
+- Vibrato versus tahrir classification
+- Smart enhancement of a singer's existing tahrir
+- Musical phrase-level ornament generation / microtonal scale adaptation
+- Final quality and host compatibility validation
 
-Next milestone: Verify successful Windows x64 VST3 build and test host loading.
+This is an experimental audible DSP build, not a production-ready vocal processor.

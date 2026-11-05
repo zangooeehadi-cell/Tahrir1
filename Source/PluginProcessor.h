@@ -1,5 +1,6 @@
 #pragma once
 #include <JuceHeader.h>
+#include <vector>
 
 class SmartTahrirProcessor final : public juce::AudioProcessor
 {
@@ -33,5 +34,17 @@ public:
     Parameters parameters;
 
 private:
+    float readDelay (int channel, float delaySamples) const noexcept;
+    float makeTahrirCurve (float phase, int style) const noexcept;
+
+    double currentSampleRate = 44100.0;
+    std::vector<std::vector<float>> delayMemory;
+    int writePosition = 0;
+    int delayCapacity = 0;
+    double lfoPhase = 0.0;
+    double voicedHoldSamples = 0.0;
+    float gateEnvelope = 0.0f;
+    int fixedLatencySamples = 0;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SmartTahrirProcessor)
 };
