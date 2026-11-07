@@ -4,18 +4,25 @@ static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
  using namespace juce; std::vector<std::unique_ptr<RangedAudioParameter>> p;
  p.push_back(std::make_unique<AudioParameterFloat>("enhance","Tahrir Boost",NormalisableRange<float>(0,100,0.1f),22));
  p.push_back(std::make_unique<AudioParameterFloat>("autoTahrir","Auto Tahrir",NormalisableRange<float>(0,100,0.1f),78));
- p.push_back(std::make_unique<AudioParameterFloat>("hold","Hold Time",NormalisableRange<float>(120,1200,1),320));
- p.push_back(std::make_unique<AudioParameterFloat>("depth","Tahrir Depth",NormalisableRange<float>(0,100,0.1f),58));
- p.push_back(std::make_unique<AudioParameterFloat>("speed","Tahrir Speed",NormalisableRange<float>(2.5f,9,0.01f),5.2f));
+ p.push_back(std::make_unique<AudioParameterFloat>("hold","Hold Time",NormalisableRange<float>(50,1000,1),140));
+ p.push_back(std::make_unique<AudioParameterFloat>("depth","Tahrir Depth",NormalisableRange<float>(0,100,0.1f),62));
+ p.push_back(std::make_unique<AudioParameterFloat>("speed","Tahrir Speed",NormalisableRange<float>(4,14,0.01f),8.0f));
  p.push_back(std::make_unique<AudioParameterChoice>("style","Style",StringArray{"Persian","Arabic","Turkish"},0));
  return {p.begin(),p.end()};
 }
-SmartTahrirProcessor::SmartTahrirProcessor():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true).withOutput("Output",juce::AudioChannelSet::stereo(),true)),parameters(*this,nullptr,"HADI_PARAMETERS",createParameterLayout()){}
+SmartTahrirProcessor::SmartTahrirProcessor():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true).withOutput("Output",juce::AudioChannelSet::stereo(),true)),parameters(*this,nullptr,"HADI_PARAMETERS",createParameterLayout()){
+ for(auto& v:customCurve)v.store(0.0f);
+}
+void SmartTahrirProcessor::setCustomCurve(const std::array<float,curveSize>& curve)noexcept{
+ for(int i=0;i<curveSize;++i)customCurve[(size_t)i].store(juce::jlimit(-1.0f,1.0f,curve[(size_t)i]),std::memory_order_relaxed);
+ customCurveEnabled.store(true,std::memory_order_relaxed);
+}
 void SmartTahrirProcessor::prepareToPlay(double sr,int block){
  currentSampleRate=sr>1000?sr:44100; maxBlockSize=juce::jmax(65536,block);
  pitchInput.assign(2,std::vector<float>((size_t)maxBlockSize)); pitchOutput.assign(2,std::vector<float>((size_t)maxBlockSize));
  pitchCurve.assign((size_t)maxBlockSize,0); wetCurve.assign((size_t)maxBlockSize,0); inputPointers.resize(2); outputPointers.resize(2);
- pitchEngine.configure(2,2048,256,true); pitchEngine.reset(); pitchEngine.setFormantFactor(1.0f,true); pitchEngine.setFormantBase(0.0f);
+ // Shorter analysis/hop settings reduce the response delay for fast ornamentation.
+ pitchEngine.configure(2,1024,128,true); pitchEngine.reset(); pitchEngine.setFormantFactor(1.0f,true); pitchEngine.setFormantBase(0.0f);
  latencySamples=pitchEngine.inputLatency()+pitchEngine.outputLatency(); setLatencySamples(latencySamples);
  delayCapacity=latencySamples+maxBlockSize+512; dryDelay.assign(2,std::vector<float>((size_t)delayCapacity,0)); delayWrite=0;
  analysisBuffer.assign(2048,0); analysisWrite=analysisFill=samplesUntilAnalysis=decimationCounter=0;
@@ -31,7 +38,7 @@ float SmartTahrirProcessor::readDelay(int ch,float delay)const noexcept{
 }
 void SmartTahrirProcessor::analysePitch()noexcept{
  constexpr int win=1024; if(analysisFill<win){pitchConfidence=0;detectedF0=0;return;}
- const int rate=(int)std::round(currentSampleRate*0.5),minLag=juce::jmax(12,rate/1000),maxLag=juce::jmin(420,rate/70);
+ const int rate=(int)std::round(currentSampleRate*0.5),minLag=juce::jmax(12,rate/1000),maxLag=juce::jmin(420,rate/65);
  const int start=(analysisWrite+(int)analysisBuffer.size()-win)%(int)analysisBuffer.size(); float best=0;int bestLag=0;
  for(int lag=minLag;lag<=maxLag;++lag){double cross=0,e1=0,e2=0;for(int n=lag;n<win;++n){
   const float a=analysisBuffer[(size_t)((start+n)%(int)analysisBuffer.size())],b=analysisBuffer[(size_t)((start+n-lag)%(int)analysisBuffer.size())];
@@ -56,23 +63,26 @@ void SmartTahrirProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const int style=(int)parameters.getRawParameterValue("style")->load();
  double energy=0;int count=0;for(int c=0;c<channels;++c){const float* p=buffer.getReadPointer(c);for(int i=0;i<nSamples;++i){energy+=(double)p[i]*p[i];++count;}}
  const float rms=count?(float)std::sqrt(energy/count):0;
- for(int i=0;i<nSamples;++i){
-  const float l=buffer.getReadPointer(0)[i],r=channels>1?buffer.getReadPointer(1)[i]:l;
+ for(int i=0;i<nSamples;++i){const float l=buffer.getReadPointer(0)[i],r=channels>1?buffer.getReadPointer(1)[i]:l;
   pitchInput[0][(size_t)i]=l;pitchInput[1][(size_t)i]=r;decimationAccumulator+=0.5f*(l+r);
   if(++decimationCounter>=2){analysisBuffer[(size_t)analysisWrite]=decimationAccumulator*0.5f;analysisWrite=(analysisWrite+1)%(int)analysisBuffer.size();
    analysisFill=juce::jmin(analysisFill+1,(int)analysisBuffer.size());decimationCounter=0;decimationAccumulator=0;
-   if(++samplesUntilAnalysis>=1024){samplesUntilAnalysis=0;analysePitch();}}
+   if(++samplesUntilAnalysis>=512){samplesUntilAnalysis=0;analysePitch();}}
  }
- const bool voiced=rms>0.0045f&&pitchConfidence>0.42f&&detectedF0>=65&&detectedF0<=1000;
+ const bool voiced=rms>0.0035f&&pitchConfidence>0.42f&&detectedF0>=65&&detectedF0<=1000;
  if(voiced)voicedHoldSamples+=nSamples;else voicedHoldSamples=0;
  const double required=currentSampleRate*(hold/1000.0);
  const float target=(amount>0.1f&&voiced&&voicedHoldSamples>=required)?1.0f:0.0f;
- const float atk=1.0f-std::exp(-1.0f/(float)(currentSampleRate*0.035)),rel=1.0f-std::exp(-1.0f/(float)(currentSampleRate*0.16));
- const float maxDepth=juce::jlimit(0.0f,190.0f,depth*1.35f+boost*0.35f);const double phaseInc=speed/currentSampleRate;
+ const float atk=1.0f-std::exp(-1.0f/(float)(currentSampleRate*0.008)),rel=1.0f-std::exp(-1.0f/(float)(currentSampleRate*0.075));
+ const float maxDepth=juce::jlimit(0.0f,240.0f,depth*1.75f+boost*0.45f);const double phaseInc=speed/currentSampleRate;
+ const bool useCustom=customCurveEnabled.load(std::memory_order_relaxed);
  for(int i=0;i<nSamples;++i){gateEnvelope+=(target-gateEnvelope)*(target>gateEnvelope?atk:rel);
-  pitchCurve[(size_t)i]=makeTahrirCurve(tahrirPhase,style)*maxDepth*gateEnvelope;wetCurve[(size_t)i]=gateEnvelope*(amount/100.0f);
+  float shape=makeTahrirCurve(tahrirPhase,style);
+  if(useCustom){const float pos=(float)(tahrirPhase*(curveSize-1));const int a=juce::jlimit(0,curveSize-1,(int)pos),b=juce::jmin(curveSize-1,a+1);const float f=pos-a;
+   shape=customCurve[(size_t)a].load(std::memory_order_relaxed)*(1-f)+customCurve[(size_t)b].load(std::memory_order_relaxed)*f;}
+  pitchCurve[(size_t)i]=shape*maxDepth*gateEnvelope;wetCurve[(size_t)i]=gateEnvelope*(amount/100.0f);
   tahrirPhase+=phaseInc;if(tahrirPhase>=1)tahrirPhase-=std::floor(tahrirPhase);}
- constexpr int quantum=64;
+ constexpr int quantum=32;
  for(int offset=0;offset<nSamples;offset+=quantum){const int len=juce::jmin(quantum,nSamples-offset);double sum=0;
   for(int i=0;i<len;++i)sum+=pitchCurve[(size_t)(offset+i)];
   pitchEngine.setTransposeSemitones((float)(sum/len)/100.0f);
