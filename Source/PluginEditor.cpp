@@ -121,7 +121,7 @@ void TahrirCurveEditor::mouseDrag(const juce::MouseEvent& e) { editAt(e.position
 SmartTahrirEditor::SmartTahrirEditor(SmartTahrirProcessor& p)
     : juce::AudioProcessorEditor(p), processor(p)
 {
-    setSize(760, 650);
+    setSize(760, 690);
     auto setupSlider = [this](juce::Slider& s, juce::Label& l, const juce::String& name)
     {
         addAndMakeVisible(s); addAndMakeVisible(l);
@@ -200,6 +200,7 @@ SmartTahrirEditor::SmartTahrirEditor(SmartTahrirProcessor& p)
     };
     preset.setSelectedId(1);
     loadPreset(1);
+    startTimerHz(30);
 }
 
 void SmartTahrirEditor::loadPreset(int presetId)
@@ -223,15 +224,42 @@ void SmartTahrirEditor::loadPreset(int presetId)
     status.setText("Preset contour loaded. Adjust Depth, Speed and Hold to taste.", juce::dontSendNotification);
 }
 
-void SmartTahrirEditor::paint(juce::Graphics& g) { g.fillAll(juce::Colour(0xff10141b)); }
+void SmartTahrirEditor::paint(juce::Graphics& g)
+{
+    g.fillAll(juce::Colour(0xff10141b));
+    if (meterBounds.isEmpty()) return;
+    auto area = meterBounds.toFloat();
+    const float labelW = 72.0f, gap = 10.0f;
+    const float barW = area.getWidth() - labelW - gap - 58.0f;
+    auto drawMeter = [&](float y, const juce::String& label, float level)
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.85f));
+        g.setFont(12.0f);
+        g.drawText(label, (int)area.getX(), (int)y, (int)labelW, 16, juce::Justification::centredLeft);
+        juce::Rectangle<float> bar(area.getX()+labelW, y+2.0f, barW, 12.0f);
+        g.setColour(juce::Colour(0xff303846)); g.fillRoundedRectangle(bar, 3.0f);
+        const float db = level > 0.000001f ? juce::Decibels::gainToDecibels(level) : -60.0f;
+        const float norm = juce::jlimit(0.0f, 1.0f, (db+60.0f)/60.0f);
+        auto fill = bar.withWidth(bar.getWidth()*norm);
+        g.setColour(db > -3.0f ? juce::Colour(0xfff06a52) : juce::Colour(0xff56d6c9));
+        g.fillRoundedRectangle(fill, 3.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.8f));
+        g.drawText(juce::String(db,1)+" dB", (int)(bar.getRight()+6), (int)y, 52, 16, juce::Justification::centredRight);
+    };
+    drawMeter(area.getY()+1.0f, "INPUT", processor.getInputLevel());
+    drawMeter(area.getY()+19.0f, "OUTPUT", processor.getOutputLevel());
+}
+void SmartTahrirEditor::timerCallback() { repaint(meterBounds); }
 
 void SmartTahrirEditor::resized()
 {
     auto r = getLocalBounds().reduced(18);
     title.setBounds(r.removeFromTop(34));
     subtitle.setBounds(r.removeFromTop(25));
-    r.removeFromTop(5);
-    auto controls = r.removeFromTop(145);
+    r.removeFromTop(3);
+    meterBounds = r.removeFromTop(38);
+    r.removeFromTop(3);
+    auto controls = r.removeFromTop(138);
     const int cellWidth = controls.getWidth() / 5;
     juce::Component* sliders[] = { &enhance, &autoTahrir, &hold, &depth, &speed };
     juce::Label* labels[] = { &enhanceLabel, &autoLabel, &holdLabel, &depthLabel, &speedLabel };
@@ -254,7 +282,7 @@ void SmartTahrirEditor::resized()
     curveLabel.setText("PITCH CONTOUR PREVIEW  |  horizontal = time, vertical = pitch movement", juce::dontSendNotification);
     curveLabel.setColour(juce::Label::textColourId, juce::Colours::white);
     curveLabel.setBounds(r.removeFromTop(22));
-    curveEditor.setBounds(r.removeFromTop(190));
+    curveEditor.setBounds(r.removeFromTop(170));
     r.removeFromTop(6);
     auto buttons = r.removeFromTop(32);
     importButton.setBounds(buttons.removeFromLeft(175));

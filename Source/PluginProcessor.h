@@ -22,6 +22,8 @@ public:
  void setCustomCurve(const std::array<float,curveSize>& curve, float durationSeconds = 0.55f) noexcept;
  void setCustomCurveEnabled(bool enabled) noexcept { customCurveEnabled.store(enabled,std::memory_order_relaxed); }
  bool isCustomCurveEnabled() const noexcept { return customCurveEnabled.load(std::memory_order_relaxed); }
+ float getInputLevel() const noexcept { return inputLevel.load(std::memory_order_relaxed); }
+ float getOutputLevel() const noexcept { return outputLevel.load(std::memory_order_relaxed); }
 private:
  float readDelay(int,float) const noexcept; float makeTahrirCurve(double,int) const noexcept; void analysePitch() noexcept;
  double currentSampleRate=44100.0;
@@ -36,5 +38,6 @@ private:
  int analysisWrite=0,analysisFill=0,samplesUntilAnalysis=0,decimationCounter=0;
  float decimationAccumulator=0.0f,detectedF0=0.0f,pitchConfidence=0.0f,previousF0=0.0f;
  double voicedHoldSamples=0.0,tahrirPhase=0.0; float gateEnvelope=0.0f;
+ std::atomic<float> inputLevel{0.0f},outputLevel{0.0f};
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SmartTahrirProcessor)
 };

@@ -2,10 +2,10 @@
 #include "PluginEditor.h"
 static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout(){
  using namespace juce; std::vector<std::unique_ptr<RangedAudioParameter>> p;
- p.push_back(std::make_unique<AudioParameterFloat>("enhance","Tahrir Boost",NormalisableRange<float>(0,100,0.1f),22));
+ p.push_back(std::make_unique<AudioParameterFloat>("enhance","Tahrir Boost",NormalisableRange<float>(0,100,0.1f),35));
  p.push_back(std::make_unique<AudioParameterFloat>("autoTahrir","Auto Tahrir",NormalisableRange<float>(0,100,0.1f),78));
- p.push_back(std::make_unique<AudioParameterFloat>("hold","Hold Time",NormalisableRange<float>(50,1000,1),140));
- p.push_back(std::make_unique<AudioParameterFloat>("depth","Tahrir Depth",NormalisableRange<float>(0,100,0.1f),62));
+ p.push_back(std::make_unique<AudioParameterFloat>("hold","Hold Time",NormalisableRange<float>(40,600,1),90));
+ p.push_back(std::make_unique<AudioParameterFloat>("depth","Tahrir Depth",NormalisableRange<float>(0,100,0.1f),75));
  p.push_back(std::make_unique<AudioParameterFloat>("speed","Tahrir Speed",NormalisableRange<float>(4,14,0.01f),8.0f));
  p.push_back(std::make_unique<AudioParameterChoice>("style","Style",StringArray{"Persian","Arabic","Turkish"},0));
  return {p.begin(),p.end()};
@@ -23,10 +23,10 @@ void SmartTahrirProcessor::prepareToPlay(double sr,int block){
  pitchInput.assign(2,std::vector<float>((size_t)maxBlockSize)); pitchOutput.assign(2,std::vector<float>((size_t)maxBlockSize));
  pitchCurve.assign((size_t)maxBlockSize,0); wetCurve.assign((size_t)maxBlockSize,0); inputPointers.resize(2); outputPointers.resize(2);
  // Shorter analysis/hop settings reduce the response delay for fast ornamentation.
- pitchEngine.configure(2,1024,128,true); pitchEngine.reset(); pitchEngine.setFormantFactor(1.0f,true); pitchEngine.setFormantBase(0.0f);
+ pitchEngine.configure(2,512,64,true); pitchEngine.reset(); pitchEngine.setFormantFactor(1.0f,true); pitchEngine.setFormantBase(0.0f);
  latencySamples=pitchEngine.inputLatency()+pitchEngine.outputLatency(); setLatencySamples(latencySamples);
  delayCapacity=latencySamples+maxBlockSize+512; dryDelay.assign(2,std::vector<float>((size_t)delayCapacity,0)); delayWrite=0;
- analysisBuffer.assign(2048,0); analysisWrite=analysisFill=samplesUntilAnalysis=decimationCounter=0;
+ analysisBuffer.assign(2048,0); analysisWrite=analysisFill=samplesUntilAnalysis=decimationCounter=0; inputLevel.store(0.0f); outputLevel.store(0.0f);
  decimationAccumulator=detectedF0=previousF0=pitchConfidence=0; voicedHoldSamples=tahrirPhase=0; gateEnvelope=0;
 }
 void SmartTahrirProcessor::releaseResources(){pitchInput.clear();pitchOutput.clear();dryDelay.clear();analysisBuffer.clear();pitchCurve.clear();wetCurve.clear();inputPointers.clear();outputPointers.clear();}
@@ -64,6 +64,7 @@ void SmartTahrirProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const int style=(int)parameters.getRawParameterValue("style")->load();
  double energy=0;int count=0;for(int c=0;c<channels;++c){const float* p=buffer.getReadPointer(c);for(int i=0;i<nSamples;++i){energy+=(double)p[i]*p[i];++count;}}
  const float rms=count?(float)std::sqrt(energy/count):0;
+ inputLevel.store(0.72f*inputLevel.load(std::memory_order_relaxed)+0.28f*rms,std::memory_order_relaxed);
  for(int i=0;i<nSamples;++i){const float l=buffer.getReadPointer(0)[i],r=channels>1?buffer.getReadPointer(1)[i]:l;
   pitchInput[0][(size_t)i]=l;pitchInput[1][(size_t)i]=r;decimationAccumulator+=0.5f*(l+r);
   if(++decimationCounter>=2){analysisBuffer[(size_t)analysisWrite]=decimationAccumulator*0.5f;analysisWrite=(analysisWrite+1)%(int)analysisBuffer.size();
@@ -80,7 +81,8 @@ void SmartTahrirProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float intensity=juce::jlimit(0.0f,1.0f,amount/100.0f);
  const float depthScale=juce::jlimit(0.0f,1.0f,depth/100.0f);
  const float enhanceScale=1.0f+0.25f*juce::jlimit(0.0f,100.0f,boost)/100.0f;
- const float maxDepthCents=35.0f*intensity*depthScale*enhanceScale;
+ // A useful musical range: full-scale depth reaches 140 cents; defaults are intentionally audible.
+ const float maxDepthCents=140.0f*intensity*depthScale*enhanceScale;
  const float target=(voiced&&voicedHoldSamples>=required&&maxDepthCents>0.05f)?1.0f:0.0f;
  const double patternHz=useCustom?((double)speed/8.0/(double)juce::jmax(0.12f,customCurveDurationSeconds.load(std::memory_order_relaxed))):(double)speed;
  const double phaseInc=patternHz/currentSampleRate;
@@ -96,6 +98,8 @@ void SmartTahrirProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   if(useCustom){const float pos=(float)(tahrirPhase*(curveSize-1));const int a=juce::jlimit(0,curveSize-1,(int)pos),b=juce::jmin(curveSize-1,a+1);const float f=pos-a;
    shape=customCurve[(size_t)a].load(std::memory_order_relaxed)*(1-f)+customCurve[(size_t)b].load(std::memory_order_relaxed)*f;}
   shape-=(float)contourMean;
+  // Fade the final 8% of each loop toward the zero-pitch anchor to avoid a discontinuity.
+  if(tahrirPhase>0.92) shape*=juce::jlimit(0.0f,1.0f,(float)((1.0-tahrirPhase)/0.08));
   pitchCurve[(size_t)i]=shape*maxDepthCents*gateEnvelope;
   // Avoid parallel dry/wet pitch mixing: it creates two simultaneous pitches.
   wetCurve[(size_t)i]=gateEnvelope;
@@ -112,6 +116,10 @@ void SmartTahrirProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
    const float dry=readDelay(c,(float)latencySamples),wet=juce::jlimit(0.0f,1.0f,wetCurve[(size_t)i]);
    buffer.getWritePointer(c)[i]=dry+(pitchOutput[(size_t)c][(size_t)i]-dry)*wet;}
   delayWrite=(delayWrite+1)%delayCapacity;}
+ double outEnergy=0.0; int outCount=0;
+ for(int c=0;c<channels;++c){const float* out=buffer.getReadPointer(c);for(int i=0;i<nSamples;++i){outEnergy+=(double)out[i]*out[i];++outCount;}}
+ const float outRms=outCount?(float)std::sqrt(outEnergy/outCount):0.0f;
+ outputLevel.store(0.72f*outputLevel.load(std::memory_order_relaxed)+0.28f*outRms,std::memory_order_relaxed);
 }
 juce::AudioProcessorEditor* SmartTahrirProcessor::createEditor(){return new SmartTahrirEditor(*this);}
 void SmartTahrirProcessor::getStateInformation(juce::MemoryBlock& d){

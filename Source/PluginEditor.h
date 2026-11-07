@@ -17,13 +17,15 @@ private:
     std::array<float, SmartTahrirProcessor::curveSize> curve{};
 };
 
-class SmartTahrirEditor final : public juce::AudioProcessorEditor {
+class SmartTahrirEditor final : public juce::AudioProcessorEditor, private juce::Timer {
 public:
     explicit SmartTahrirEditor(SmartTahrirProcessor&);
     ~SmartTahrirEditor() override = default;
     void paint(juce::Graphics&) override;
     void resized() override;
 private:
+    void timerCallback() override;
+    juce::Rectangle<int> meterBounds;
     void importSample();
     void loadPreset(int presetId);
     SmartTahrirProcessor& processor;
