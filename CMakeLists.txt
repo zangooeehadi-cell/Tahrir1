@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 project(HADI VERSION 0.4.0)
 include(FetchContent)
 FetchContent_Declare(JUCE GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 7.0.12 GIT_SHALLOW TRUE)
-FetchContent_Declare(signalsmith-stretch GIT_REPOSITORY https://github.com/Signalsmith-Audio/signalsmith-stretch.git GIT_TAG 88061fd4eda56a2353c5d65c74aa3f4ccf76f9da GIT_SHALLOW TRUE)
+FetchContent_Declare(signalsmith-stretch GIT_REPOSITORY https://github.com/Signalsmith-Audio/signalsmith-stretch.git GIT_TAG 57b93f4e9206a089a45387eaa39bdc9f310d3308)
 FetchContent_MakeAvailable(JUCE signalsmith-stretch)
 juce_add_plugin(SmartTahrirProcessor COMPANY_NAME "Hadi Zangoui" BUNDLE_ID "com.hadizangoui.hadi"
  PLUGIN_MANUFACTURER_CODE Hadi PLUGIN_CODE Hd01 FORMATS VST3 PRODUCT_NAME "HADI"
