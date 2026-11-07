@@ -96,6 +96,21 @@ void SmartTahrirProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   delayWrite=(delayWrite+1)%delayCapacity;}
 }
 juce::AudioProcessorEditor* SmartTahrirProcessor::createEditor(){return new SmartTahrirEditor(*this);}
-void SmartTahrirProcessor::getStateInformation(juce::MemoryBlock& d){auto s=parameters.copyState();std::unique_ptr<juce::XmlElement>x(s.createXml());copyXmlToBinary(*x,d);}
-void SmartTahrirProcessor::setStateInformation(const void* d,int n){std::unique_ptr<juce::XmlElement>x(getXmlFromBinary(d,n));if(x&&x->hasTagName(parameters.state.getType()))parameters.replaceState(juce::ValueTree::fromXml(*x));}
+void SmartTahrirProcessor::getStateInformation(juce::MemoryBlock& d){
+ auto s=parameters.copyState();std::unique_ptr<juce::XmlElement>x(s.createXml());
+ auto* curve=x->createNewChildElement("CUSTOM_TAHRIR_CURVE");
+ curve->setAttribute("enabled",customCurveEnabled.load(std::memory_order_relaxed));
+ for(int i=0;i<curveSize;++i)curve->setAttribute("p"+juce::String(i),customCurve[(size_t)i].load(std::memory_order_relaxed));
+ copyXmlToBinary(*x,d);
+}
+void SmartTahrirProcessor::setStateInformation(const void* d,int n){
+ std::unique_ptr<juce::XmlElement>x(getXmlFromBinary(d,n));
+ if(x&&x->hasTagName(parameters.state.getType())){
+  parameters.replaceState(juce::ValueTree::fromXml(*x));
+  if(auto* curve=x->getChildByName("CUSTOM_TAHRIR_CURVE")){
+   for(int i=0;i<curveSize;++i)customCurve[(size_t)i].store((float)curve->getDoubleAttribute("p"+juce::String(i),0.0),std::memory_order_relaxed);
+   customCurveEnabled.store(curve->getBoolAttribute("enabled",false),std::memory_order_relaxed);
+  }
+ }
+}
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new SmartTahrirProcessor();}
