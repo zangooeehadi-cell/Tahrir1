@@ -1,23 +1,4 @@
-Smart Tahrir Processor
-Version: 0.2 experimental DSP
-
-Implemented:
-- JUCE VST3 project
-- Generated JuceHeader via juce_generate_juce_header
-- Stereo input/output
-- Modulated-delay pitch ornament engine
-- Sustained input-energy hold gate
-- Persian / Arabic / Turkish initial curve profiles
-- Enhance, Auto Tahrir, Hold, Depth, Speed, Style controls
-- Parameter state persistence
-- Reported fixed latency
-- Windows x64 GitHub Actions build and artifact upload
-
-Not yet implemented:
-- Reliable monophonic F0 tracking
-- Vibrato versus tahrir classification
-- Smart enhancement of a singer's existing tahrir
-- Musical phrase-level ornament generation / microtonal scale adaptation
-- Final quality and host compatibility validation
-
-This is an experimental audible DSP build, not a production-ready vocal processor.
+HADI 0.3.0 — experimental pitch-shift engine rewrite
+Implemented in source: HADI branding; dual-head crossfaded variable-delay pitch shifter; Persian/Arabic/Turkish initial contours; half-rate autocorrelation estimate for voiced gating; sustained-signal hold trigger; nonzero default Auto Tahrir; aligned dry/wet timing; saved parameters.
+Still experimental/not implemented: robust noisy/polyphonic F0 tracking; vibrato-versus-tahrir classification; independent enhancement of singer's existing tahrir; formant-preserving shift; data-driven regional ornament models; listening validation on real singing; Cubase 5 host validation.
+Do not call this a finished professional AI vocal processor until listening tests validate it.
