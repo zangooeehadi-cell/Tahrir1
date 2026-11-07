@@ -13,8 +13,9 @@ static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
 SmartTahrirProcessor::SmartTahrirProcessor():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true).withOutput("Output",juce::AudioChannelSet::stereo(),true)),parameters(*this,nullptr,"HADI_PARAMETERS",createParameterLayout()){
  for(auto& v:customCurve)v.store(0.0f);
 }
-void SmartTahrirProcessor::setCustomCurve(const std::array<float,curveSize>& curve)noexcept{
+void SmartTahrirProcessor::setCustomCurve(const std::array<float,curveSize>& curve,float durationSeconds)noexcept{
  for(int i=0;i<curveSize;++i)customCurve[(size_t)i].store(juce::jlimit(-1.0f,1.0f,curve[(size_t)i]),std::memory_order_relaxed);
+ customCurveDurationSeconds.store(juce::jlimit(0.12f,12.0f,durationSeconds),std::memory_order_relaxed);
  customCurveEnabled.store(true,std::memory_order_relaxed);
 }
 void SmartTahrirProcessor::prepareToPlay(double sr,int block){
@@ -74,8 +75,10 @@ void SmartTahrirProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const double required=currentSampleRate*(hold/1000.0);
  const float target=(amount>0.1f&&voiced&&voicedHoldSamples>=required)?1.0f:0.0f;
  const float atk=1.0f-std::exp(-1.0f/(float)(currentSampleRate*0.008)),rel=1.0f-std::exp(-1.0f/(float)(currentSampleRate*0.075));
- const float maxDepth=juce::jlimit(0.0f,240.0f,depth*1.75f+boost*0.45f);const double phaseInc=speed/currentSampleRate;
+ const float maxDepth=juce::jlimit(0.0f,240.0f,depth*1.75f+boost*0.45f);
  const bool useCustom=customCurveEnabled.load(std::memory_order_relaxed);
+ const double patternHz=useCustom?((double)speed/8.0/(double)juce::jmax(0.12f,customCurveDurationSeconds.load(std::memory_order_relaxed))):(double)speed;
+ const double phaseInc=patternHz/currentSampleRate;
  for(int i=0;i<nSamples;++i){gateEnvelope+=(target-gateEnvelope)*(target>gateEnvelope?atk:rel);
   float shape=makeTahrirCurve(tahrirPhase,style);
   if(useCustom){const float pos=(float)(tahrirPhase*(curveSize-1));const int a=juce::jlimit(0,curveSize-1,(int)pos),b=juce::jmin(curveSize-1,a+1);const float f=pos-a;
@@ -100,6 +103,7 @@ void SmartTahrirProcessor::getStateInformation(juce::MemoryBlock& d){
  auto s=parameters.copyState();std::unique_ptr<juce::XmlElement>x(s.createXml());
  auto* curve=x->createNewChildElement("CUSTOM_TAHRIR_CURVE");
  curve->setAttribute("enabled",customCurveEnabled.load(std::memory_order_relaxed));
+ curve->setAttribute("durationSeconds",(double)customCurveDurationSeconds.load(std::memory_order_relaxed));
  for(int i=0;i<curveSize;++i)curve->setAttribute("p"+juce::String(i),customCurve[(size_t)i].load(std::memory_order_relaxed));
  copyXmlToBinary(*x,d);
 }
@@ -109,6 +113,7 @@ void SmartTahrirProcessor::setStateInformation(const void* d,int n){
   parameters.replaceState(juce::ValueTree::fromXml(*x));
   if(auto* curve=x->getChildByName("CUSTOM_TAHRIR_CURVE")){
    for(int i=0;i<curveSize;++i)customCurve[(size_t)i].store((float)curve->getDoubleAttribute("p"+juce::String(i),0.0),std::memory_order_relaxed);
+   customCurveDurationSeconds.store((float)curve->getDoubleAttribute("durationSeconds",0.55),std::memory_order_relaxed);
    customCurveEnabled.store(curve->getBoolAttribute("enabled",false),std::memory_order_relaxed);
   }
  }

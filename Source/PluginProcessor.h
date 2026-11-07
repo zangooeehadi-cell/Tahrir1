@@ -19,7 +19,7 @@ public:
  void changeProgramName(int,const juce::String&) override{}
  void getStateInformation(juce::MemoryBlock&) override; void setStateInformation(const void*,int) override;
  using Parameters=juce::AudioProcessorValueTreeState; Parameters parameters;
- void setCustomCurve(const std::array<float,curveSize>& curve) noexcept;
+ void setCustomCurve(const std::array<float,curveSize>& curve, float durationSeconds = 0.55f) noexcept;
  void setCustomCurveEnabled(bool enabled) noexcept { customCurveEnabled.store(enabled,std::memory_order_relaxed); }
  bool isCustomCurveEnabled() const noexcept { return customCurveEnabled.load(std::memory_order_relaxed); }
 private:
@@ -31,6 +31,7 @@ private:
  std::vector<float> pitchCurve,wetCurve,analysisBuffer;
  std::array<std::atomic<float>,curveSize> customCurve {};
  std::atomic<bool> customCurveEnabled{false};
+ std::atomic<float> customCurveDurationSeconds{0.55f};
  int maxBlockSize=65536,delayWrite=0,delayCapacity=0,latencySamples=0;
  int analysisWrite=0,analysisFill=0,samplesUntilAnalysis=0,decimationCounter=0;
  float decimationAccumulator=0.0f,detectedF0=0.0f,pitchConfidence=0.0f,previousF0=0.0f;
