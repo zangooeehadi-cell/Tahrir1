@@ -73,23 +73,38 @@ void SmartTahrirProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const bool voiced=rms>0.0035f&&pitchConfidence>0.42f&&detectedF0>=65&&detectedF0<=1000;
  if(voiced)voicedHoldSamples+=nSamples;else voicedHoldSamples=0;
  const double required=currentSampleRate*(hold/1000.0);
- const float target=(amount>0.1f&&voiced&&voicedHoldSamples>=required)?1.0f:0.0f;
  const float atk=1.0f-std::exp(-1.0f/(float)(currentSampleRate*0.008)),rel=1.0f-std::exp(-1.0f/(float)(currentSampleRate*0.075));
- const float maxDepth=juce::jlimit(0.0f,240.0f,depth*1.75f+boost*0.45f);
  const bool useCustom=customCurveEnabled.load(std::memory_order_relaxed);
+ // Auto Tahrir controls intensity, Depth controls maximum excursion.
+ // Maximum deviation is capped at 35 cents to protect the sung note.
+ const float intensity=juce::jlimit(0.0f,1.0f,amount/100.0f);
+ const float depthScale=juce::jlimit(0.0f,1.0f,depth/100.0f);
+ const float enhanceScale=1.0f+0.25f*juce::jlimit(0.0f,100.0f,boost)/100.0f;
+ const float maxDepthCents=35.0f*intensity*depthScale*enhanceScale;
+ const float target=(voiced&&voicedHoldSamples>=required&&maxDepthCents>0.05f)?1.0f:0.0f;
  const double patternHz=useCustom?((double)speed/8.0/(double)juce::jmax(0.12f,customCurveDurationSeconds.load(std::memory_order_relaxed))):(double)speed;
  const double phaseInc=patternHz/currentSampleRate;
+ // Center each curve around zero so it cannot pull the sustained note sharp or flat.
+ double contourMean=0.0;
+ for(int k=0;k<curveSize;++k){
+  if(useCustom) contourMean+=customCurve[(size_t)k].load(std::memory_order_relaxed);
+  else contourMean+=makeTahrirCurve((double)k/(double)curveSize,style);
+ }
+ contourMean/=(double)curveSize;
  for(int i=0;i<nSamples;++i){gateEnvelope+=(target-gateEnvelope)*(target>gateEnvelope?atk:rel);
   float shape=makeTahrirCurve(tahrirPhase,style);
   if(useCustom){const float pos=(float)(tahrirPhase*(curveSize-1));const int a=juce::jlimit(0,curveSize-1,(int)pos),b=juce::jmin(curveSize-1,a+1);const float f=pos-a;
    shape=customCurve[(size_t)a].load(std::memory_order_relaxed)*(1-f)+customCurve[(size_t)b].load(std::memory_order_relaxed)*f;}
-  pitchCurve[(size_t)i]=shape*maxDepth*gateEnvelope;wetCurve[(size_t)i]=gateEnvelope*(amount/100.0f);
+  shape-=(float)contourMean;
+  pitchCurve[(size_t)i]=shape*maxDepthCents*gateEnvelope;
+  // Avoid parallel dry/wet pitch mixing: it creates two simultaneous pitches.
+  wetCurve[(size_t)i]=gateEnvelope;
   tahrirPhase+=phaseInc;if(tahrirPhase>=1)tahrirPhase-=std::floor(tahrirPhase);}
  constexpr int quantum=32;
  for(int offset=0;offset<nSamples;offset+=quantum){const int len=juce::jmin(quantum,nSamples-offset);double sum=0;
   for(int i=0;i<len;++i)sum+=pitchCurve[(size_t)(offset+i)];
   pitchEngine.setTransposeSemitones((float)(sum/len)/100.0f);
-  pitchEngine.setFormantBase(detectedF0>0?(float)(detectedF0/currentSampleRate):0.0f);
+  // Keep formant reference neutral; do not feed the tracked F0 back as a formant setting.
   for(int c=0;c<2;++c){inputPointers[(size_t)c]=pitchInput[(size_t)c].data()+offset;outputPointers[(size_t)c]=pitchOutput[(size_t)c].data()+offset;}
   pitchEngine.process(inputPointers.data(),len,outputPointers.data(),len);
  }

@@ -1,4 +1,14 @@
-HADI 0.4.0 — spectral pitch engine integration
-Implemented in source: HADI branding; Signalsmith Stretch spectral pitch shifting; formant compensation enabled; pitch automation updated in 64-sample chunks; initial Persian/Arabic/Turkish ornament contours; half-rate autocorrelation voiced gate; sustained hold activation; dry path aligned using reported engine latency; parameter state persistence.
-Not yet implemented/validated: robust noisy/polyphonic F0 tracking; vibrato-versus-tahrir classification; independent enhancement of singer's existing tahrir; data-driven regional ornament patterns; real-vocal listening tests; Cubase 5 compatibility and CPU/latency validation.
-Do not call this a finished professional AI vocal processor until listening tests validate it.
+HADI — pitch-safe tahrir processing revision
+Implemented:
+- Zero-centered custom and built-in pitch contours to reduce sustained pitch bias.
+- Conservative pitch excursion cap of 35 cents, scaled by Auto Tahrir and Depth.
+- Removed steady-state parallel dry/pitch-shift blend to avoid simultaneous competing pitches.
+- Kept formant reference neutral instead of modulating it with the rough F0 estimate.
+- Preserved latency-aligned dry path for inactive periods.
+
+Still unvalidated:
+- Audio quality and note stability must be tested with real vocal recordings.
+- F0 tracking remains a basic monophonic autocorrelation gate.
+- No robust vibrato/tahrir classifier or independent enhancement of existing tahrir.
+- No validated artist-specific presets or voice imitation.
+- Cubase host compatibility, CPU use and latency need practical testing.
